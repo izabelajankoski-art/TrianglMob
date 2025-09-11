@@ -34,7 +34,7 @@
         "backgroundColor": "#ffffff",
         "bundler": "metro"
       },
-      "versionCode": 12,
+      "versionCode": 13,
       "package": "com.crni89.myapp",
       "permissions": [
         "CAMERA"
