@@ -34,6 +34,7 @@
         "backgroundColor": "#ffffff",
         "bundler": "metro"
       },
+      "icon": "./assets/ic_launcher.png",
       "versionCode": 13,
       "package": "com.crni89.myapp",
       "permissions": [

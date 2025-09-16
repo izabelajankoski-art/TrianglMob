@@ -1,8 +1,11 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect, useRef } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import api from './api';
 
 import LoginScreen from './screens/Login';
 import Register from './screens/Register';
@@ -16,8 +19,80 @@ import SessionStudentsScreen from "./screens/Teacher/SessionStudentScreen";
 
 const RootStack = createNativeStackNavigator();
 
+// 📌 Kako se notifikacije prikazuju dok je app otvoren
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
+});
+
 function AppNavigator() {
     const { user, isLoading } = useContext(AuthContext);
+    const notificationListener = useRef();
+    const responseListener = useRef();
+
+    useEffect(() => {
+        const registerForPushNotifications = async () => {
+            let token;
+            if (Device.isDevice) {
+                const { status: existingStatus } = await Notifications.getPermissionsAsync();
+                let finalStatus = existingStatus;
+                if (existingStatus !== 'granted') {
+                    const { status } = await Notifications.requestPermissionsAsync();
+                    finalStatus = status;
+                }
+                if (finalStatus !== 'granted') {
+                    alert('Permission for push notifications not granted!');
+                    return;
+                }
+
+                token = (await Notifications.getExpoPushTokenAsync()).data;
+
+                if (user && token) {
+                    try {
+                        await api.post('/device-token', {
+                            expo_push_token: token,   // 👈 backend očekuje ovo ime
+                            platform: Platform.OS,    // android / ios
+                            app_version: '1.0.0',
+                        });
+                    } catch (error) {
+                        if (error.response) {
+                            console.log("📡 Status:", error.response.status);
+                            console.log("📡 Headers:", error.response.headers);
+                            console.log("📡 Data:", error.response.data);
+                        } else if (error.request) {
+                            console.log("📡 Request:", error.request);
+                        } else {
+                            console.log("📡 Error message:", error.message);
+                        }
+                        console.error("❌ Axios error config:", error.config);
+                    }
+                }
+            } else {
+                alert('Must use physical device for Push Notifications');
+            }
+            return token;
+        };
+
+        registerForPushNotifications();
+
+        // Listener kad stigne notifikacija dok je app otvoren
+        notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+            console.log('📩 Nova notifikacija:', notification);
+        });
+
+        // Listener kad user klikne na notifikaciju
+        responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+            console.log('👆 Korisnik kliknuo na notifikaciju:', response);
+        });
+
+        return () => {
+            notificationListener.current && notificationListener.current.remove();
+            responseListener.current && responseListener.current.remove();
+        };
+    }, [user]);
 
     if (isLoading) {
         return (
