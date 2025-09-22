@@ -35,7 +35,7 @@
         "bundler": "metro"
       },
       "icon": "./assets/ic_launcher.png",
-      "versionCode": 13,
+      "versionCode": 14,
       "package": "com.crni89.myapp",
       "permissions": [
         "CAMERA",
