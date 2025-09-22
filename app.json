@@ -38,7 +38,8 @@
       "versionCode": 13,
       "package": "com.crni89.myapp",
       "permissions": [
-        "CAMERA"
+        "CAMERA",
+        "POST_NOTIFICATIONS"
       ],
       "edgeToEdge": true
     },

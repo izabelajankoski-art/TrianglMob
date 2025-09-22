@@ -49,12 +49,13 @@ function AppNavigator() {
                 }
 
                 token = (await Notifications.getExpoPushTokenAsync()).data;
+                console.log("Expo push token:", token);
 
                 if (user && token) {
                     try {
                         await api.post('/device-token', {
-                            expo_push_token: token,   // 👈 backend očekuje ovo ime
-                            platform: Platform.OS,    // android / ios
+                            expo_push_token: token,
+                            platform: Platform.OS,
                             app_version: '1.0.0',
                         });
                     } catch (error) {
@@ -78,6 +79,16 @@ function AppNavigator() {
 
         registerForPushNotifications();
 
+        // 📌 Dodaj kanal za Android
+        if (Platform.OS === 'android') {
+            Notifications.setNotificationChannelAsync('default', {
+                name: 'default',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#FF231F7C',
+            });
+        }
+
         // Listener kad stigne notifikacija dok je app otvoren
         notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
             console.log('📩 Nova notifikacija:', notification);
@@ -93,6 +104,7 @@ function AppNavigator() {
             responseListener.current && responseListener.current.remove();
         };
     }, [user]);
+
 
     if (isLoading) {
         return (
