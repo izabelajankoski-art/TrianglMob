@@ -22,7 +22,7 @@
       "supportsTablet": true,
       "bundler": "metro",
       "bundleIdentifier": "com.triangl.app",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "infoPlist": {
         "NSCameraUsageDescription": "Aplikacija treba pristup kameri za skeniranje QR kodova",
         "ITSAppUsesNonExemptEncryption": false
@@ -30,18 +30,19 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/ic_launcher.png",
+        "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff",
         "bundler": "metro"
       },
       "icon": "./assets/ic_launcher.png",
-      "versionCode": 14,
+      "versionCode": 18,
       "package": "com.crni89.myapp",
       "permissions": [
         "CAMERA",
         "POST_NOTIFICATIONS"
       ],
-      "edgeToEdge": true
+      "edgeToEdge": true,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/ic_launcher.png",

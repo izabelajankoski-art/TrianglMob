@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:140198248380:android:37308d7933578f3b2175b9",
+        "mobilesdk_app_id": "1:140198248380:android:5c7373cac78eafa82175b9",
         "android_client_info": {
-          "package_name": "com.triangl.app"
+          "package_name": "com.crni89.myapp"
         }
       },
       "oauth_client": [],

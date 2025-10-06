@@ -55,9 +55,11 @@ export default function LoginScreen() {
         setLoading(true);
         try {
             const resp = await api.post('/login', { nameOrEmail, password });
+
             await AsyncStorage.setItem('token', resp.data.token);
             api.defaults.headers.common['Authorization'] = `Bearer ${resp.data.token}`;
             const { user, firstLogin } = resp.data;
+            // const firstLogin = resp.data.user?.student?.parent_name === null;
 
             let profileData = null;
             if (user.role === 'student') {
