@@ -14,6 +14,7 @@ import TeacherProfileScreen from "../screens/Teacher/TeacherProfileScreen";
 import RateStudentScreen from "../screens/Teacher/RateStudentScreen";
 import FloatingQRButton from "../components/FloatingQRButton";
 import TeacherQRCode from "../screens/Teacher/TeacherQRCode";
+import AdminHome from "../screens/Admin/AdminHome";
 
 const Drawer = createDrawerNavigator();
 
@@ -99,6 +100,15 @@ export default function TeacherDrawerNavigator({navigation}) {
                 options={{
                     title: 'Oceni učenika',
                     drawerIcon: ({ size }) => <Ionicons name="star" size={size} color="#fff" />
+                }}
+            />
+            <Drawer.Screen
+                name="AdminHome"
+                component={AdminHome}
+                initialParams={{ user, profile }}
+                options={{
+                    title: 'Skeniraj učenike',
+                    drawerIcon: ({ size }) => <Ionicons name="qr-code-outline" size={size} color="#fff" />
                 }}
             />
         </Drawer.Navigator>
