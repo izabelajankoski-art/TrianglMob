@@ -24,19 +24,28 @@ export default function PrisustvaScreen({ route }) {
             const res = await api.get(`/student/${student.id}/attendances`);
             const rawAttendances = res.data?.attendances || [];
 
-            const confirmed = rawAttendances.filter(
-                (a) => a.confirmation_status !== 'pending'
-            );
+            const ONE_HOUR_MS = 60 * 60 * 1000;
+            const nowPlusOneHour = new Date(Date.now() + ONE_HOUR_MS);
 
-            const sorted = [...confirmed].sort(
-                (a, b) =>
-                    new Date(b.class_session.date) - new Date(a.class_session.date)
-            );
+            // ✅ samo prosli casovi, ali NE izbacujemo cancelled
+            const pastOnly = rawAttendances.filter((a) => {
+                const session = a.class_session;
+                if (!session?.date || !session?.end_time) return false;
+
+                const sessionEnd = new Date(`${session.date}T${session.end_time}`);
+                return sessionEnd < nowPlusOneHour;
+            });
+
+            const sorted = [...pastOnly].sort((a, b) => {
+                const aEnd = new Date(`${a.class_session.date}T${a.class_session.end_time}`);
+                const bEnd = new Date(`${b.class_session.date}T${b.class_session.end_time}`);
+                return bEnd - aEnd;
+            });
 
             setAttendances(sorted);
             applyFilter(filterStatus, sorted);
         } catch (error) {
-            console.error('Greška pri učitavanju prisustava:', error);
+            console.error("Greška pri učitavanju prisustava:", error);
         } finally {
             setRefreshing(false);
         }
@@ -53,15 +62,27 @@ export default function PrisustvaScreen({ route }) {
 
     const applyFilter = (status, data = attendances) => {
         setFilterStatus(status);
+
         if (status === '') {
             setFiltered(data);
-        } else {
-            setFiltered(data.filter((a) => a.status === status));
+            return;
         }
+
+        if (status === 'cancelled') {
+            setFiltered(data.filter((a) => a.confirmation_status === 'cancelled'));
+            return;
+        }
+
+        // present/absent
+        setFiltered(data.filter((a) => a.status === status));
     };
 
-    const getStatusIcon = (status) => {
-        switch (status) {
+    const getStatusIcon = (item) => {
+        if (item.confirmation_status === 'cancelled') {
+            return <Ionicons name="ban" size={20} color="#ff8c00" />;
+        }
+
+        switch (item.status) {
             case 'present':
                 return <Ionicons name="checkmark-circle" size={20} color="green" />;
             case 'absent':
@@ -71,8 +92,9 @@ export default function PrisustvaScreen({ route }) {
         }
     };
 
-    const totalPresent = attendances.filter(a => a.status === 'present').length;
-    const totalAbsent = attendances.filter(a => a.status === 'absent').length;
+    const totalCancelled = attendances.filter(a => a.confirmation_status === 'cancelled').length;
+    const totalPresent = attendances.filter(a => a.confirmation_status !== 'cancelled' && a.status === 'present').length;
+    const totalAbsent = attendances.filter(a => a.confirmation_status !== 'cancelled' && a.status === 'absent').length;
     const totalClasses = attendances.length;
 
     const FilterButton = ({ label, status }) => (
@@ -102,10 +124,26 @@ export default function PrisustvaScreen({ route }) {
                 }
             >
                 {/* Prikaz ukupnih brojeva */}
-                <View style={styles.countsContainer}>
-                    <Text style={styles.countText}>Ukupno časova: {totalClasses}</Text>
-                    <Text style={styles.countText}>Prisustva: {totalPresent}</Text>
-                    <Text style={styles.countText}>Odsustva: {totalAbsent}</Text>
+                <View style={styles.statsGrid}>
+                    <View style={styles.statCard}>
+                        <Text style={styles.statLabel}>Ukupno casova</Text>
+                        <Text style={styles.statValue}>{totalClasses}</Text>
+                    </View>
+
+                    <View style={styles.statCard}>
+                        <Text style={styles.statLabel}>Prisustva</Text>
+                        <Text style={[styles.statValue, { color: "green" }]}>{totalPresent}</Text>
+                    </View>
+
+                    <View style={styles.statCard}>
+                        <Text style={styles.statLabel}>Odsustva</Text>
+                        <Text style={[styles.statValue, { color: "red" }]}>{totalAbsent}</Text>
+                    </View>
+
+                    <View style={styles.statCard}>
+                        <Text style={styles.statLabel}>Otkazano</Text>
+                        <Text style={[styles.statValue, { color: "#ff8c00" }]}>{totalCancelled}</Text>
+                    </View>
                 </View>
 
                 <View style={styles.filterWrapper}>
@@ -113,6 +151,7 @@ export default function PrisustvaScreen({ route }) {
                         <FilterButton label="Sva" status="" />
                         <FilterButton label="Prisutan" status="present" />
                         <FilterButton label="Odsutan" status="absent" />
+                        <FilterButton label="Otkazano" status="cancelled" />
                     </View>
                 </View>
 
@@ -125,8 +164,9 @@ export default function PrisustvaScreen({ route }) {
                                 <Text style={styles.course}>
                                     {item.class_session.course?.name || 'Nepoznat kurs'}
                                 </Text>
-                                {getStatusIcon(item.status)}
+                                {getStatusIcon(item)}
                             </View>
+
                             <Text style={styles.detail}>
                                 📅 {Moment(item.class_session.date).format('DD.MM.YYYY.')}
                             </Text>
@@ -136,6 +176,12 @@ export default function PrisustvaScreen({ route }) {
                             <Text style={styles.detail}>
                                 📍 {item.class_session.location}
                             </Text>
+
+                            {item.confirmation_status === 'cancelled' && (
+                                <Text style={[styles.detail, { marginTop: 6, color: '#ff8c00', fontWeight: '700' }]}>
+                                    Otkazano
+                                </Text>
+                            )}
                         </View>
                     ))
                 )}
@@ -233,5 +279,35 @@ const styles = StyleSheet.create({
         marginTop: 32,
         color: '#888',
         fontSize: 16,
+    },
+    statsGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        justifyContent: "space-between",
+        marginBottom: 16,
+    },
+
+    statCard: {
+        width: "48%",
+        backgroundColor: "#f5f5f5",
+        borderRadius: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 12,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: "#e6e6e6",
+    },
+
+    statLabel: {
+        fontSize: 13,
+        color: "#555",
+        fontWeight: "600",
+        marginBottom: 6,
+    },
+
+    statValue: {
+        fontSize: 22,
+        fontWeight: "800",
+        color: "#112E50",
     },
 });
