@@ -65,11 +65,22 @@ export default function FirstLoginScreen() {
 
     const [loading, setLoading] = useState(false);
 
+    // ✅ Android: picker se prikazuje samo kad korisnik klikne (da ne iskače na svaki rerender)
+    const [showDatePicker, setShowDatePicker] = useState(false);
+
     const formatDate = (date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    };
+
+    const handleBirthDateChange = (event, selectedDate) => {
+        // Android: zatvori dialog posle izbora / cancel
+        if (Platform.OS === 'android') setShowDatePicker(false);
+
+        // iOS: event može dolaziti više puta; čuvamo samo ako postoji datum
+        if (selectedDate) setBirthDate(selectedDate);
     };
 
     const handleSave = async () => {
@@ -95,7 +106,7 @@ export default function FirstLoginScreen() {
                 username: user.username,
                 role: user.role,
                 password: password,
-                new_user: false
+                new_user: false,
             });
 
             // 2️⃣ Update dodatnih podataka zavisno od role
@@ -123,9 +134,8 @@ export default function FirstLoginScreen() {
                 }
 
                 await api.put(`/teacher/${user.teacher.id}`, {
-                    // user_id: user.id,
                     phone,
-                    year_exp: parseInt(yearExp),
+                    year_exp: parseInt(yearExp, 10),
                     birth_date: formatDate(birthDate),
                 });
             }
@@ -137,11 +147,63 @@ export default function FirstLoginScreen() {
             });
         } catch (err) {
             console.error(err);
-            Alert.alert('Greška', err.response?.data?.message || err.message || 'Došlo je do greške.');
+            Alert.alert(
+                'Greška',
+                err.response?.data?.message || err.message || 'Došlo je do greške.'
+            );
         } finally {
             setLoading(false);
         }
     };
+
+    // ✅ iOS: inline spinner (kao pre). Android: “polje” + picker samo kad treba.
+    const BirthDateField = () => (
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>Datum rođenja *</Text>
+
+            {Platform.OS === 'ios' ? (
+                <DateTimePicker
+                    display="spinner"
+                    value={birthDate}
+                    mode="date"
+                    onChange={handleBirthDateChange}
+                />
+            ) : (
+                <>
+                    <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => setShowDatePicker(true)}
+                    >
+                        {/* pointerEvents none da klik ide na TouchableOpacity, a izgleda kao input */}
+                        <View pointerEvents="none">
+                            <TextInput
+                                value={formatDate(birthDate)}
+                                placeholder="Izaberite datum"
+                                placeholderTextColor={COLORS.placeholder}
+                                editable={false}
+                                style={styles.input}
+                            />
+                        </View>
+                    </TouchableOpacity>
+
+                    {showDatePicker && (
+                        <DateTimePicker
+                            value={birthDate}
+                            mode="date"
+                            display="default"
+                            onChange={(event, selectedDate) => {
+                                // Android: razlikuj potvrdu i cancel (da ne menja datum na dismiss)
+                                setShowDatePicker(false);
+                                if (event?.type === 'set' && selectedDate) {
+                                    setBirthDate(selectedDate);
+                                }
+                            }}
+                        />
+                    )}
+                </>
+            )}
+        </View>
+    );
 
     return (
         <SafeAreaView style={styles.container}>
@@ -211,6 +273,7 @@ export default function FirstLoginScreen() {
                                     value={parentName}
                                     onChangeText={setParentName}
                                     placeholder="Unesite ime roditelja"
+                                    placeholderTextColor={COLORS.placeholder}
                                     style={styles.input}
                                 />
                             </View>
@@ -221,6 +284,7 @@ export default function FirstLoginScreen() {
                                     value={parentPhone}
                                     onChangeText={setParentPhone}
                                     placeholder="Telefon roditelja"
+                                    placeholderTextColor={COLORS.placeholder}
                                     keyboardType="phone-pad"
                                     style={styles.input}
                                 />
@@ -232,6 +296,7 @@ export default function FirstLoginScreen() {
                                     value={phone}
                                     onChangeText={setPhone}
                                     placeholder="Unesite broj telefona"
+                                    placeholderTextColor={COLORS.placeholder}
                                     keyboardType="phone-pad"
                                     style={styles.input}
                                 />
@@ -243,6 +308,7 @@ export default function FirstLoginScreen() {
                                     value={primarySchool}
                                     onChangeText={setPrimarySchool}
                                     placeholder="Naziv škole"
+                                    placeholderTextColor={COLORS.placeholder}
                                     style={styles.input}
                                 />
                             </View>
@@ -262,17 +328,7 @@ export default function FirstLoginScreen() {
                                 />
                             </View>
 
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Datum rođenja *</Text>
-                                <DateTimePicker
-                                    display="spinner"
-                                    value={birthDate}
-                                    mode="date"
-                                    onChange={(event, selectedDate) => {
-                                        if (selectedDate) setBirthDate(selectedDate);
-                                    }}
-                                />
-                            </View>
+                            <BirthDateField />
                         </>
                     )}
 
@@ -285,6 +341,7 @@ export default function FirstLoginScreen() {
                                     value={phone}
                                     onChangeText={setPhone}
                                     placeholder="Unesite broj telefona"
+                                    placeholderTextColor={COLORS.placeholder}
                                     keyboardType="phone-pad"
                                     style={styles.input}
                                 />
@@ -296,22 +353,13 @@ export default function FirstLoginScreen() {
                                     value={yearExp}
                                     onChangeText={setYearExp}
                                     placeholder="Unesite broj godina iskustva"
+                                    placeholderTextColor={COLORS.placeholder}
                                     keyboardType="numeric"
                                     style={styles.input}
                                 />
                             </View>
 
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Datum rođenja *</Text>
-                                <DateTimePicker
-                                    display="spinner"
-                                    value={birthDate}
-                                    mode="date"
-                                    onChange={(event, selectedDate) => {
-                                        if (selectedDate) setBirthDate(selectedDate);
-                                    }}
-                                />
-                            </View>
+                            <BirthDateField />
                         </>
                     )}
 

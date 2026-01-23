@@ -21,6 +21,7 @@ const FILTER_LABELS = {
 const PAYMENT_TYPE = {
     cash: 'gotovina',
     card: 'kartica',
+    inovice: 'račun'
 };
 
 const FilterButton = ({ label, status, active, onPress }) => {
