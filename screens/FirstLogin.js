@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useContext, useState} from 'react';
 import {
     SafeAreaView,
     View,
@@ -16,6 +16,8 @@ import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import DropDownPicker from 'react-native-dropdown-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../api';
+import {AuthContext} from "../context/AuthContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const COLORS = {
     white: '#FFFFFF',
@@ -27,7 +29,7 @@ const COLORS = {
 
 export default function FirstLoginScreen() {
     const navigation = useNavigation();
-    const { user } = useRoute().params;
+    const { user, setUser } = useContext(AuthContext);
 
     // zajedničko (šifra)
     const [password, setPassword] = useState('');
@@ -141,6 +143,15 @@ export default function FirstLoginScreen() {
             }
 
             Alert.alert('Uspešno', 'Podaci su sačuvani.');
+
+            const updatedUser = {
+                ...user,
+                new_user: 0,
+            };
+
+            setUser(updatedUser);
+            await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+
             navigation.reset({
                 index: 0,
                 routes: [{ name: 'Dashboard' }],

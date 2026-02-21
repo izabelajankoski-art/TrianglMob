@@ -163,9 +163,16 @@ function AppNavigator() {
         );
     }
 
+
     return (
         <RootStack.Navigator
-            initialRouteName={user ? 'Dashboard' : 'Login'}
+            initialRouteName={
+                !user
+                    ? 'Login'
+                    : user.new_user === 1
+                        ? 'FirstLogin'
+                        : 'Dashboard'
+            }
             screenOptions={{ headerShown: false }}
         >
             <RootStack.Screen name="Login" component={LoginScreen} />
