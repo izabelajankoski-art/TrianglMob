@@ -141,6 +141,7 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
             startDate.setHours(hour, minute, 0);
             const endDate = new Date(startDate.getTime() + 45 * 60000);
 
+
             await api.post('/class-requests', {
                 student_id: student.id,
                 course_id: selectedCourse,
@@ -148,7 +149,7 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
                 date: date.toISOString().split('T')[0],
                 start_time: selectedTime,
                 end_time: endDate.toTimeString().slice(0, 5),
-                location
+                location : `${location} - ${student.full_name}`
             });
 
             Alert.alert('Uspeh', 'Zahtev je poslat.');

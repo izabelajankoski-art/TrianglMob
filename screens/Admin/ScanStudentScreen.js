@@ -16,6 +16,8 @@ export default function ScanStudentScreen({ navigation, route }) {
     const [facing, setFacing] = useState("back");
     const [permission, requestPermission] = useCameraPermissions();
     const isProcessing = useRef(false);
+    const lastScannedAt = useRef(0);
+    const SCAN_COOLDOWN = 3000;
 
     useEffect(() => {
         if (!permission) requestPermission();
@@ -130,8 +132,12 @@ export default function ScanStudentScreen({ navigation, route }) {
                                 every_week: false,
                             });
 
+                            body.class_session_id = newClassSession.data.id;
 
                             Alert.alert("Uspeh", "Kreiran vanredni čas.");
+                            console.log(body)
+                            await api.post("/attendance/change-attendance-status", body);
+
                         } catch (e) {
                             Alert.alert(
                                 "Greška",
@@ -145,6 +151,17 @@ export default function ScanStudentScreen({ navigation, route }) {
     };
 
     const handleBarCodeScanned = async ({ data }) => {
+        // if (isProcessing.current) return;
+        // isProcessing.current = true;
+
+        const now = Date.now();
+
+        if (now - lastScannedAt.current < SCAN_COOLDOWN) {
+            return;
+        }
+
+        lastScannedAt.current = now;
+
         if (isProcessing.current) return;
         isProcessing.current = true;
 

@@ -1,3 +1,4 @@
+// :contentReference[oaicite:0]{index=0}
 import React, { useEffect, useState, useCallback } from "react";
 import {
     SafeAreaView,
@@ -15,11 +16,9 @@ import { Calendar, LocaleConfig } from "react-native-calendars";
 import Moment from "moment";
 import api from "../../api";
 
-// 📅 Lokalizacija kalendara
+// 📅 Lokalizacija
 LocaleConfig.locales["sr"] = {
-    monthNames: [
-        "Januar","Februar","Mart","April","Maj","Jun","Jul","Avgust","Septembar","Oktobar","Novembar","Decembar"
-    ],
+    monthNames: ["Januar","Februar","Mart","April","Maj","Jun","Jul","Avgust","Septembar","Oktobar","Novembar","Decembar"],
     monthNamesShort: ["jan","feb","mar","apr","maj","jun","jul","avg","sep","okt","nov","dec"],
     dayNames: ["nedelja","ponedeljak","utorak","sreda","četvrtak","petak","subota"],
     dayNamesShort: ["ned","pon","uto","sre","čet","pet","sub"],
@@ -35,6 +34,7 @@ const FILTER_LABELS = {
 };
 
 export default function Schedule({ navigation, route }) {
+
     const { user, profile } = route.params;
     const studentId = profile?.id ?? user?.student?.id;
 
@@ -50,19 +50,22 @@ export default function Schedule({ navigation, route }) {
     const [selectedSession, setSelectedSession] = useState(null);
     const [modalLoading, setModalLoading] = useState(false);
 
-    // 🔹 Učitavanje rasporeda
+    // učitavanje
     const loadAttendances = useCallback(async () => {
         if (!studentId) return;
+
         setLoading(true);
+
         try {
             const res = await api.get(`/student/${studentId}/attendances`);
             setAttendances(res.data.attendances || []);
         } catch (err) {
             console.error(err);
-            Alert.alert("Greška", err.response?.data?.message || "Neuspešno učitavanje termina.");
+            Alert.alert("Greška", "Neuspešno učitavanje termina.");
         } finally {
             setLoading(false);
         }
+
     }, [studentId]);
 
     const onRefresh = useCallback(async () => {
@@ -75,8 +78,9 @@ export default function Schedule({ navigation, route }) {
         loadAttendances();
     }, [loadAttendances]);
 
-    // 🔹 Normalizacija rasporeda u mapu po datumima
+    // normalizacija
     useEffect(() => {
+
         const normalized = attendances
             .filter(a => a.class_session)
             .filter(a => filterType === '' || a.class_session.course.type === filterType)
@@ -88,19 +92,25 @@ export default function Schedule({ navigation, route }) {
                 start_time: a.class_session.start_time,
                 end_time: a.class_session.end_time,
                 course: a.class_session.course,
+                location: a.class_session.location
             }));
 
         const map = {};
+
         normalized.forEach(s => {
             if (!map[s.date]) map[s.date] = [];
             map[s.date].push(s);
         });
+
         setScheduleMap(map);
+
     }, [attendances, filterType]);
 
-    // 🔹 Kalendarsko označavanje sa velikim krugom za novi čas
+    // kalendar mark
     const markedDates = {};
+
     Object.entries(scheduleMap).forEach(([day, list]) => {
+
         const hasHighlighted = list.some(c => c.class_session_id === highlightedSessionId);
 
         if (hasHighlighted) {
@@ -126,6 +136,7 @@ export default function Schedule({ navigation, route }) {
                 dotColor: "#112E50",
             };
         }
+
     });
 
     if (selectedDate) {
@@ -136,68 +147,74 @@ export default function Schedule({ navigation, route }) {
         };
     }
 
-    // 🔹 Potvrda ili otkazivanje časa
+    // 🔥 STATUS CHANGE
     const handleChangeStatus = async (sessionId, newStatus, sessionDate) => {
+
         if (!studentId) return;
 
         const today = Moment().format("YYYY-MM-DD");
-        if (newStatus === "cancelled" && sessionDate === today) {
-            Alert.alert("Zabrana", "Čas koji je zakazan za danas ne može se otkazati.");
+
+        // ❌ prošli čas
+        if (Moment(sessionDate).isBefore(today)) {
+            Alert.alert("Zabrana", "Ne možete menjati status za prošle časove.");
             return;
         }
 
-        setLoading(true);
+        // ❌ danas ne može otkazivanje
+        if (newStatus === "cancelled" && sessionDate === today) {
+            Alert.alert("Zabrana", "Čas za danas ne može da se otkaže.");
+            return;
+        }
+
+        // optimistic update
+        setAttendances(prev =>
+            prev.map(a =>
+                a.class_session_id === sessionId
+                    ? { ...a, confirmation_status: newStatus }
+                    : a
+            )
+        );
+
         try {
             await api.post("/attendance/change-confirmation-status", {
                 class_session_id: sessionId,
                 student_id: studentId,
                 status: newStatus,
             });
-            Alert.alert(newStatus === "confirmed" ? "Potvrđeno" : "Otkazano");
-            setModalVisible(false);
-            setTimeout(loadAttendances, 300);
         } catch (err) {
+
             console.error(err);
-            Alert.alert("Greška", err.response?.data?.message || "Došlo je do greške.");
-        } finally {
-            setLoading(false);
+
+            // rollback
+            setAttendances(prev =>
+                prev.map(a =>
+                    a.class_session_id === sessionId
+                        ? {
+                            ...a,
+                            confirmation_status:
+                                newStatus === "confirmed"
+                                    ? "cancelled"
+                                    : "confirmed",
+                        }
+                        : a
+                )
+            );
+
+            Alert.alert("Greška", "Promena statusa nije uspela.");
         }
     };
-
-    // 🔹 Otvaranje modala iz notifikacije
-    const openClassFromNotification = async (classSessionId) => {
-        setHighlightedSessionId(classSessionId);
-        setModalVisible(true);
-        setModalLoading(true);
-        try {
-            const res = await api.get(`/classSession/${classSessionId}`);
-            setSelectedSession(res.data);
-        } catch (err) {
-            console.error("Greška pri dohvatanju časa:", err);
-            Alert.alert("Greška", "Ne mogu da učitam detalje časa.");
-        } finally {
-            setModalLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        if (route.params?.openSessionId) {
-            console.log("🔔 Otvaram modal za čas ID:", route.params.openSessionId);
-            setHighlightedSessionId(route.params.openSessionId);
-            openClassFromNotification(route.params.openSessionId);
-        }
-    }, [route.params?.openSessionId]);
 
     return (
         <SafeAreaView style={tw`flex-1 bg-gray-100`}>
-            {/* Filteri */}
+
+            {/* filter */}
             <View style={tw`flex-row justify-around py-2 bg-white`}>
                 {Object.entries(FILTER_LABELS).map(([key, label]) => (
                     <TouchableOpacity
                         key={key}
                         onPress={() => setFilterType(key)}
                         style={tw`
-                            px-5 py-5 rounded-1
+                            px-5 py-3 rounded-xl
                             ${filterType === key ? "bg-[#FFA500]" : "bg-gray-200"}
                         `}
                     >
@@ -208,7 +225,7 @@ export default function Schedule({ navigation, route }) {
                 ))}
             </View>
 
-            {/* Kalendar */}
+            {/* calendar */}
             <View style={tw`mt-4 mx-4 bg-white rounded-xl shadow`}>
                 <Calendar
                     onDayPress={(day) => setSelectedDate(day.dateString)}
@@ -218,14 +235,12 @@ export default function Schedule({ navigation, route }) {
                         todayTextColor: "#112E50",
                         selectedDayBackgroundColor: "#112E50",
                         arrowColor: "#112E50",
-                        textDayFontSize: 16,
                     }}
-                    monthFormat="MMMM"
                     firstDay={1}
                 />
             </View>
 
-            {/* Lista časova */}
+            {/* list */}
             <ScrollView
                 style={tw`mt-4 px-4`}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -239,110 +254,88 @@ export default function Schedule({ navigation, route }) {
                         </Text>
 
                         {(scheduleMap[selectedDate] || []).map((c) => {
+
+                            const today = Moment().format("YYYY-MM-DD");
+                            const isPast = Moment(c.date).isBefore(today);
+                            const isToday = c.date === today;
+
                             const isConfirmed = c.confirmation_status === "confirmed";
-                            const isHighlighted = c.class_session_id === highlightedSessionId;
+                            const isCancelled = c.confirmation_status === "cancelled";
+
                             return (
                                 <View
                                     key={c.class_session_id}
-                                    style={tw`
-                                        mb-4 rounded-xl p-4 flex-row items-center shadow
-                                        ${isHighlighted ? "bg-yellow-100 border-2 border-[#FFA500]" : "bg-white"}
-                                    `}
+                                    style={tw`mb-4 rounded-xl p-4 bg-white shadow`}
                                 >
-                                    <View style={tw`w-1 h-full ${isHighlighted ? "bg-[#FFA500]" : "bg-[#112E50]"} rounded-l-xl mr-3`} />
-                                    <View style={tw`flex-1`}>
-                                        <Text style={tw`font-bold text-gray-800`}>
-                                            {c.course.name}
-                                        </Text>
-                                        <Text style={tw`text-gray-600`}>
-                                            {c.start_time}–{c.end_time}
-                                        </Text>
-                                    </View>
+                                    <Text style={tw`font-bold text-gray-800`}>
+                                        {c.course.name}
+                                    </Text>
 
-                                    <View style={tw`flex-row gap-2`}>
-                                        {isConfirmed ? (
-                                            <>
-                                                <TouchableOpacity
-                                                    style={tw`px-3 py-1 bg-gray-600 rounded`}
-                                                    onPress={() => handleChangeStatus(c.class_session_id, "cancelled", c.date)}
-                                                >
-                                                    <Text style={tw`text-white`}>Otkaži</Text>
-                                                </TouchableOpacity>
-                                                <View style={tw`px-3 py-1 bg-orange-500 rounded`}>
-                                                    <Text style={tw`text-white`}>Potvrđeno</Text>
-                                                </View>
-                                            </>
-                                        ) : (
-                                            <TouchableOpacity
-                                                style={tw`px-3 py-1 bg-[#112E50] rounded`}
-                                                onPress={() => handleChangeStatus(c.class_session_id, "confirmed", c.date)}
-                                            >
-                                                <Text style={tw`text-white`}>Potvrdi</Text>
-                                            </TouchableOpacity>
-                                        )}
+                                    <Text style={tw`text-gray-600`}>
+                                        {c.start_time}–{c.end_time}
+                                    </Text>
+
+                                    <Text style={tw`text-xs text-gray-700`}>
+                                        📍{c.location || "Nepoznata lokacija"}
+                                    </Text>
+
+
+                                    {/* STATUS INFO */}
+                                    {isPast && (
+                                        <Text style={tw`text-xs text-gray-400 mt-2`}>
+                                            Ovaj čas je završen
+                                        </Text>
+                                    )}
+
+                                    {isToday && (
+                                        <Text style={tw`text-xs text-orange-500 mt-2`}>
+                                            Danas – ne može se otkazati
+                                        </Text>
+                                    )}
+
+                                    {/* ACTIONS */}
+                                    <View style={tw`flex-row gap-2 mt-3`}>
+
+                                        <TouchableOpacity
+                                            disabled={isConfirmed || isPast}
+                                            style={tw`
+                                                px-3 py-2 rounded
+                                                ${isConfirmed ? "bg-green-600" : "bg-gray-300"}
+                                                ${isPast ? "opacity-40" : ""}
+                                            `}
+                                            onPress={() =>
+                                                handleChangeStatus(c.class_session_id, "confirmed", c.date)
+                                            }
+                                        >
+                                            <Text style={tw`${isConfirmed ? "text-white" : "text-gray-700"}`}>
+                                                Potvrdi
+                                            </Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            disabled={isCancelled || isPast || isToday}
+                                            style={tw`
+                                                px-3 py-2 rounded
+                                                ${isCancelled ? "bg-red-600" : "bg-gray-300"}
+                                                ${(isPast || isToday) ? "opacity-40" : ""}
+                                            `}
+                                            onPress={() =>
+                                                handleChangeStatus(c.class_session_id, "cancelled", c.date)
+                                            }
+                                        >
+                                            <Text style={tw`${isCancelled ? "text-white" : "text-gray-700"}`}>
+                                                Otkaži
+                                            </Text>
+                                        </TouchableOpacity>
+
                                     </View>
                                 </View>
                             );
                         })}
-
-                        {!(scheduleMap[selectedDate] || []).length && (
-                            <Text style={tw`text-center text-gray-500 mt-10`}>Nema termina za prikaz.</Text>
-                        )}
                     </>
                 )}
             </ScrollView>
 
-            {/* Modal za prikaz notifikovanog časa */}
-            <Modal
-                animationType="slide"
-                transparent={true}
-                visible={modalVisible}
-                onRequestClose={() => setModalVisible(false)}
-            >
-                <View style={tw`flex-1 justify-center items-center bg-black/50 px-4`}>
-                    <View style={tw`bg-white w-full rounded-2xl p-5`}>
-                        {modalLoading || !selectedSession ? (
-                            <ActivityIndicator size="large" color="#F59E0B" />
-                        ) : (
-                            <>
-                                <Text style={tw`text-xl font-bold text-gray-800 mb-2`}>
-                                    {selectedSession.course?.name}
-                                </Text>
-                                <Text style={tw`text-gray-600 mb-1`}>
-                                    📅 Datum: {Moment(selectedSession.date).format("DD.MM.YYYY")}
-                                </Text>
-                                <Text style={tw`text-gray-600 mb-1`}>
-                                    🕐 Vreme: {selectedSession.start_time}–{selectedSession.end_time}
-                                </Text>
-                                <Text style={tw`text-gray-600 mb-1`}>
-                                    👨‍🏫 Nastavnik: {selectedSession.teacher?.full_name || "Nepoznato"}
-                                </Text>
-                                <Text style={tw`text-gray-600 mb-1`}>
-                                    Lokacija: {selectedSession.location || "Nepoznato"}
-                                </Text>
-
-                                <View style={tw`flex-row justify-around mt-4`}>
-                                    <TouchableOpacity
-                                        style={tw`px-4 py-2 bg-gray-500 rounded-lg`}
-                                        onPress={() => setModalVisible(false)}
-                                    >
-                                        <Text style={tw`text-white font-semibold`}>Zatvori</Text>
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        style={tw`px-4 py-2 bg-[#112E50] rounded-lg`}
-                                        onPress={() =>
-                                            handleChangeStatus(selectedSession.id, "confirmed", selectedSession.date)
-                                        }
-                                    >
-                                        <Text style={tw`text-white font-semibold`}>Potvrdi</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </>
-                        )}
-                    </View>
-                </View>
-            </Modal>
         </SafeAreaView>
     );
 }
