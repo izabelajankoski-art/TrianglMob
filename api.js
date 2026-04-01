@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const { API_URL } = Constants.expoConfig.extra;
 
 const api = axios.create({
+
+
     baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',

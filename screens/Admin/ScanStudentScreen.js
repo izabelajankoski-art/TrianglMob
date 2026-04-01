@@ -10,17 +10,17 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import tw from "twrnc";
 import api from "../../api";
 
+
 export default function ScanStudentScreen({ navigation, route }) {
     const { classSessionId } = route.params;
     const [facing, setFacing] = useState("back");
     const [permission, requestPermission] = useCameraPermissions();
     const isProcessing = useRef(false);
+    const lastScannedAt = useRef(0);
+    const SCAN_COOLDOWN = 3000;
 
-    // Čim se komponenta mount-uje, tražimo dozvolu ako je nemamo
     useEffect(() => {
-        if (!permission) {
-            requestPermission();
-        }
+        if (!permission) requestPermission();
     }, [permission, requestPermission]);
 
     if (!permission) return <View style={styles.container} />;
@@ -37,55 +37,178 @@ export default function ScanStudentScreen({ navigation, route }) {
         );
     }
 
-    const handleBarCodeScanned = ({ data }) => {
-        if (isProcessing.current) return;
-        isProcessing.current = true;
-
-        let parsed;
-        try {
-            parsed = JSON.parse(data);
-        } catch {
-            Alert.alert("Greška", "Neispravan format QR koda.");
-            isProcessing.current = false;
-            return;
-        }
+    const parseQr = (data) => {
+        const parsed = JSON.parse(data);
 
         const teacher_id = parsed.teacher_id != null ? parseInt(parsed.teacher_id, 10) : null;
         const student_id = parsed.student_id != null ? parseInt(parsed.student_id, 10) : null;
+
+        if (!teacher_id && !student_id) {
+            return { error: "QR kod ne sadrži ni teacher_id ni student_id." };
+        }
+
+        return { parsed, teacher_id, student_id };
+    };
+
+    const buildBody = ({ teacher_id, student_id }) => {
         const body = {
             class_session_id: classSessionId,
             status: "present",
         };
 
-        if (teacher_id) {
-            body.teacher_id = teacher_id;
-        } else if (student_id) {
-            body.student_id = student_id;
-        } else {
-            Alert.alert("Greška", "QR kod ne sadrži ni teacher_id ni student_id.");
-            isProcessing.current = false;
+        if (teacher_id) body.teacher_id = teacher_id;
+        if (student_id) body.student_id = student_id;
+
+        return body;
+    };
+
+    const showSuccess = ({ teacher_id, parsed }) => {
+        const who = teacher_id ? "Nastavnik" : "Učenik";
+        const name = parsed.teacher_name || parsed.student_name || "";
+        Alert.alert("Uspeh", `${who} ${name} zabeležen.`);
+    };
+
+    const handleNotEnrolledPrompt = async ({ body, parsed, teacher_id }) => {
+
+        if (!body.student_id) {
+            Alert.alert("Greška", "Entitet nije prijavljen za ovaj čas.");
             return;
         }
 
-        api
-            .post("/attendance/change-attendance-status", body)
-            .then(() => {
-                const who = teacher_id ? "Nastavnik" : "Učenik";
-                const name = parsed.teacher_name || parsed.student_name;
-                Alert.alert("Uspeh", `${who} ${name} zabeležen.`);
-            })
-            .catch((err) => {
-                if (err.response?.status === 404) {
-                    Alert.alert("Greška", "Entitet nije prijavljen za ovaj čas.");
-                } else {
-                    Alert.alert("Greška", err.response?.data?.message || "Neuspeh prilikom slanja.");
+        Alert.alert(
+            "Nema časa za učenika",
+            "Za ovog učenika ne postoji čas (nije prijavljen / nije upisan). Želite li da kreirate vanredni čas?",
+            [
+                {
+                    text: "Ne",
+                    style: "cancel",
+                    onPress: () => {
+                        // samo resetujemo obradu ranije u finally
+                    },
+                },
+                {
+                    text: "Da, kreiraj",
+                    onPress: async () => {
+                        try {
+
+                            const student = await api.get(`/student/${body.student_id}`);
+                            const classSession = await api.get(`/classSession/${body.class_session_id}`);
+
+
+                            const newCourse = await api.post(`/course`, {
+                                name: `VANREDNI ČAS - ${classSession.data.course.name} - ${student.data.full_name}`,
+                                price: classSession.data.course.price,
+                                description: classSession.data.course.description,
+                                type: classSession.data.course.type,
+                                format: classSession.data.course.format,
+                            });
+
+
+                            const newEnrollment = await api.post(`/enrollments`, {
+                                course_id: newCourse.data.id,
+                                price: classSession.data.course.price,
+                                discount_percentage: 0,
+                                payment_type: "per_session",
+                                enrolled_at: new Date().toISOString().split("T")[0],
+                                student_id: body.student_id,
+                                payment_period: "",
+                            });
+
+
+                            const teacherCours = await api.post(`/teacherCourse`, {
+                                teacher_id: classSession.data.teacher_id,
+                                course_id: newCourse.data.id,
+                            });
+
+
+                            const newClassSession = await api.post(`/classSession`, {
+                                course_id: newCourse.data.id,
+                                teacher_id: classSession.data.teacher_id,
+                                date: classSession.data.date,
+                                start_time: classSession.data.start_time,
+                                end_time: classSession.data.end_time,
+                                location: classSession.data.location,
+                                every_2_weeks: false,
+                                every_week: false,
+                            });
+
+                            body.class_session_id = newClassSession.data.id;
+
+                            Alert.alert("Uspeh", "Kreiran vanredni čas.");
+                            console.log(body)
+                            await api.post("/attendance/change-attendance-status", body);
+
+                        } catch (e) {
+                            Alert.alert(
+                                "Greška",
+                                e?.response?.data?.message || e?.message || "Neuspeh prilikom kreiranja vanrednog časa."
+                            );
+                        }
+                    },
                 }
-            })
-            .finally(() =>
-                setTimeout(() => {
-                    isProcessing.current = false;
-                }, 3000)
-            );
+            ]
+        );
+    };
+
+    const handleBarCodeScanned = async ({ data }) => {
+        // if (isProcessing.current) return;
+        // isProcessing.current = true;
+
+        const now = Date.now();
+
+        if (now - lastScannedAt.current < SCAN_COOLDOWN) {
+            return;
+        }
+
+        lastScannedAt.current = now;
+
+        if (isProcessing.current) return;
+        isProcessing.current = true;
+
+        try {
+            let result;
+            try {
+                result = parseQr(data);
+            } catch {
+                Alert.alert("Greška", "Neispravan format QR koda.");
+                return;
+            }
+
+            if (result.error) {
+                Alert.alert("Greška", result.error);
+                return;
+            }
+
+            const { parsed, teacher_id, student_id } = result;
+            const body = buildBody({ teacher_id, student_id });
+
+            try {
+                await api.post("/attendance/change-attendance-status", body);
+                showSuccess({ teacher_id, parsed });
+            } catch (err) {
+                const status = err?.response?.status;
+
+                // ✅ Tvoj slučaj: backend vraća 404 kad ne postoji attendance/enrollment
+                if (status === 404) {
+                    await handleNotEnrolledPrompt({ body, parsed, teacher_id });
+                    return;
+                }
+
+                // (Opcionalno) ako backend vrati specijalan code u payload-u
+                const code = err?.response?.data?.code;
+                if (code === "ATTENDANCE_NOT_FOUND" || code === "ENROLLMENT_NOT_FOUND_FOR_COURSE") {
+                    await handleNotEnrolledPrompt({ body, parsed, teacher_id });
+                    return;
+                }
+
+                Alert.alert("Greška", err?.response?.data?.message || "Neuspeh prilikom slanja.");
+            }
+        } finally {
+            // malo duži cooldown da ne okida više puta
+            setTimeout(() => {
+                isProcessing.current = false;
+            }, 2500);
+        }
     };
 
     const toggleCameraFacing = () => {
@@ -94,14 +217,12 @@ export default function ScanStudentScreen({ navigation, route }) {
 
     return (
         <View style={styles.container}>
-            {/* Kamera */}
             <CameraView
                 style={styles.camera}
                 facing={facing}
                 onBarcodeScanned={handleBarCodeScanned}
             />
 
-            {/* Flip dugme */}
             <View style={styles.overlay}>
                 <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
                     <Text style={styles.flipText}>Flip</Text>

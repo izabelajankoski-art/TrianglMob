@@ -1,7 +1,9 @@
 {
   "build": {
     "production": {
+      "node": "22.11.0",
       "android": {
+        "image": "latest",
         "buildType": "app-bundle"
       },
       "ios": {
@@ -24,6 +26,6 @@
     }
   },
   "cli": {
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   }
 }

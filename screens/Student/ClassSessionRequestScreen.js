@@ -5,7 +5,6 @@ import {
     Text,
     ScrollView,
     TouchableOpacity,
-    TextInput,
     Alert,
     StyleSheet,
     RefreshControl,
@@ -17,7 +16,7 @@ import { Picker } from '@react-native-picker/picker';
 import tw from 'twrnc';
 import api from '../../api';
 
-// Configure Serbian locale for calendar
+// 🇷🇸 Podešavanje kalendara na srpski
 LocaleConfig.locales['sr'] = {
     monthNames: [
         'Januar', 'Februar', 'Mart', 'April', 'Maj', 'Jun', 'Jul', 'Avgust', 'Septembar', 'Oktobar', 'Novembar', 'Decembar'
@@ -36,10 +35,7 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
     const [selectedCourse, setSelectedCourse] = useState(null);
     const [selectedTeacher, setSelectedTeacher] = useState(null);
     const [date, setDate] = useState(new Date());
-    const [startHour, setStartHour] = useState(new Date().getHours());
-    const [startMinute, setStartMinute] = useState(0);
-    const [endHour, setEndHour] = useState((new Date().getHours() + 1) % 24);
-    const [endMinute, setEndMinute] = useState(0);
+    const [selectedTime, setSelectedTime] = useState(null);
     const [location, setLocation] = useState('');
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -48,18 +44,29 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
         course: false,
         teacher: false,
         location: false,
+        time: false
     });
     const scrollViewRef = useRef(null);
-    const courseRef = useRef(null);
-    const teacherRef = useRef(null);
-    const locationRef = useRef(null);
 
+    // Dozvoljene lokacije i termini
+    const availableLocations = [
+        'Pedje Milosavljevića 48',
+        'Danila Srdića 11',
+        'TC Piramida'
+    ];
 
+    const availableTimes = [
+        '08:30',
+        '10:00',
+        '11:30',
+        '14:30',
+        '16:00',
+        '17:30'
+    ];
 
     useEffect(() => {
         fetchData();
     }, []);
-
 
     const fetchData = async () => {
         setRefreshing(true);
@@ -72,14 +79,12 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
 
             enrollments.forEach(e => {
                 if (e.course) {
-                    // dodaj kurs ako ne postoji
                     if (!uniqCourses.some(c => c.id === e.course.id)) {
                         uniqCourses.push({
                             ...e.course,
                             teachers: e.course.teachers || []
                         });
                     }
-                    // dodaj svakog profesora sa kursevima
                     e.course.teachers.forEach(t => {
                         const existing = uniqTeachers.find(x => x.id === t.id);
                         if (existing) {
@@ -108,82 +113,56 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
         }
     };
 
-
     const handleSubmit = async () => {
-        // if (!selectedCourse || !selectedTeacher) {
-        //     Alert.alert('Upozorenje', 'Izaberite kurs i profesora');
-        //     return;
-        // }
-        // if (!location.trim()) {
-        //     Alert.alert('Upozorenje', 'Lokacija je obavezna');
-        //     return;
-        // }
-
         const newErrors = {
             course: !selectedCourse,
             teacher: !selectedTeacher,
-            location: !location.trim(),
+            location: !location,
+            time: !selectedTime
         };
         setErrors(newErrors);
 
-        // Ako postoji neka greška, prekini
         if (Object.values(newErrors).some(e => e)) {
-            // Skroluj do prvog polja sa greškom
-            if (newErrors.course) {
-                courseRef.current?.measureLayout(
-                    scrollViewRef.current,
-                    (x, y) => scrollViewRef.current.scrollTo({ y, animated: true }),
-                    () => {}
-                );
-            } else if (newErrors.teacher) {
-                teacherRef.current?.measureLayout(
-                    scrollViewRef.current,
-                    (x, y) => scrollViewRef.current.scrollTo({ y, animated: true }),
-                    () => {}
-                );
-            } else if (newErrors.location) {
-                locationRef.current?.measureLayout(
-                    scrollViewRef.current,
-                    (x, y) => scrollViewRef.current.scrollTo({ y, animated: true }),
-                    () => {}
-                );
-            }
+            Alert.alert('Greška', 'Popunite sva obavezna polja');
             return;
         }
 
-
-        const start = startHour * 60 + startMinute;
-        const end = endHour * 60 + endMinute;
-        if (end <= start) {
-            Alert.alert('Greška', 'Kraj časa mora biti posle početka');
+        // Blokiraj petak
+        if (new Date(date).getDay() === 5) {
+            Alert.alert('Zabranjeno', 'Časovi se ne mogu zakazivati petkom.');
             return;
         }
+
         setSubmitting(true);
         try {
+            // Automatski kraj časa +45 min
+            const [hour, minute] = selectedTime.split(':').map(Number);
+            const startDate = new Date(date);
+            startDate.setHours(hour, minute, 0);
+            const endDate = new Date(startDate.getTime() + 45 * 60000);
+
+
             await api.post('/class-requests', {
                 student_id: student.id,
                 course_id: selectedCourse,
                 teacher_id: selectedTeacher,
                 date: date.toISOString().split('T')[0],
-                start_time: `${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}`,
-                end_time: `${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`,
-                location,
+                start_time: selectedTime,
+                end_time: endDate.toTimeString().slice(0, 5),
+                location : `${location} - ${student.full_name}`
             });
-            Alert.alert('Uspeh', 'Zahtev je poslat');
-        } catch (err) {
-            console.error(err);
-            Alert.alert('Greška', 'Neuspešno slanje zahteva');
-        } finally {
-            setSubmitting(false);
+
+            Alert.alert('Uspeh', 'Zahtev je poslat.');
             setSelectedCourse(null);
             setSelectedTeacher(null);
-            setDate(new Date());
-            setStartHour(new Date().getHours());
-            setStartMinute(0);
-            setEndHour((new Date().getHours() + 1) % 24);
-            setEndMinute(0)
+            setSelectedTime(null);
             setLocation('');
-            setErrors({ course: false, teacher: false, location: false });
+            setDate(new Date());
+        } catch (err) {
+            console.error(err);
+            Alert.alert('Greška', 'Neuspešno slanje zahteva.');
+        } finally {
+            setSubmitting(false);
             fetchData();
         }
     };
@@ -195,8 +174,8 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
             </View>
         );
     }
+
     const formatDate = (date) => {
-        const day = String(date.getDate()).padStart(2, '0');
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const year = date.getFullYear();
         return `${month}.${year}`;
@@ -204,8 +183,6 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
 
     const marked = {};
     marked[date.toISOString().split('T')[0]] = { selected: true, selectedColor: '#4e54c8' };
-    const hours = Array.from({ length: 24 }, (_, i) => i);
-    const minutes = [0, 15, 30, 45];
 
     return (
         <SafeAreaView style={tw`flex-1 bg-gray-100`}>
@@ -215,32 +192,23 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
                 keyboardVerticalOffset={80}
             >
                 <ScrollView
-                        ref={scrollViewRef}
-                        contentContainerStyle={styles.container}
-                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchData} />}
-                        keyboardShouldPersistTaps="handled"
+                    ref={scrollViewRef}
+                    contentContainerStyle={styles.container}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchData} />}
+                    keyboardShouldPersistTaps="handled"
                 >
                     <Text style={styles.label}>Kurs</Text>
-                    {errors.course && <Text style={{ color: 'red', marginTop: '-10' }}>Kurs je obavezan</Text>}
-                    <View ref={courseRef} style={styles.dropdown}>
+                    <View style={styles.dropdown}>
                         {(selectedTeacher
-                            ? teachers.find(t => t.id === selectedTeacher)?.courses || []
-                            : courses
+                                ? teachers.find(t => t.id === selectedTeacher)?.courses || []
+                                : courses
                         ).map(c => (
                             <TouchableOpacity
                                 key={c.id}
-                                style={[styles.option, selectedCourse === c.id && styles.selected, errors.course && { borderColor: 'red', borderWidth: 1 }]}
-                                onPress={() => {
-                                    if (selectedCourse === c.id) {
-                                        setSelectedCourse(null); 
-                                    } else {
-                                        setSelectedCourse(c.id);
-                                        setErrors(prev => ({ ...prev, course: false }))
-                                    }
-                                }}
-
+                                style={[styles.option, selectedCourse === c.id && styles.selected]}
+                                onPress={() => setSelectedCourse(c.id === selectedCourse ? null : c.id)}
                             >
-                                <Text style={[styles.optionText, selectedCourse === c.id && styles.selected]}>
+                                <Text style={[styles.optionText, selectedCourse === c.id && styles.optionSelectedText]}>
                                     {c.name}
                                 </Text>
                             </TouchableOpacity>
@@ -248,35 +216,24 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
                     </View>
 
                     <Text style={styles.label}>Profesor</Text>
-                    {errors.course && <Text style={{ color: 'red', marginTop: '-10' }}>Profesor je obavezan</Text>}
-                    <View ref={teacherRef} style={styles.dropdown}>
+                    <View style={styles.dropdown}>
                         {(selectedCourse
-                            ? courses.find(c => c.id === selectedCourse)?.teachers || []
-                            : teachers
+                                ? courses.find(c => c.id === selectedCourse)?.teachers || []
+                                : teachers
                         ).map(t => (
                             <TouchableOpacity
                                 key={t.id}
-                                style={[styles.option, selectedTeacher === t.id && styles.selected, errors.teacher && { borderColor: 'red', borderWidth: 1 }]}
-                                onPress={() => {
-                                    if (selectedTeacher === t.id) {
-                                        setSelectedTeacher(null);
-                                    } else {
-                                        setSelectedTeacher(t.id);
-                                        setErrors(prev => ({ ...prev, teacher: false }))
-                                    }
-                                }}
-
+                                style={[styles.option, selectedTeacher === t.id && styles.selected]}
+                                onPress={() => setSelectedTeacher(t.id === selectedTeacher ? null : t.id)}
                             >
-                                <Text style={[styles.optionText, selectedTeacher === t.id && styles.selected]}>
+                                <Text style={[styles.optionText, selectedTeacher === t.id && styles.optionSelectedText]}>
                                     {t.full_name}
                                 </Text>
                             </TouchableOpacity>
                         ))}
                     </View>
 
-
                     <Text style={styles.label}>Datum</Text>
-                    {/* <Text style={styles.selectedDateText}>Izabrani datum: {formatDate(date)}</Text> */}
                     <Calendar
                         onDayPress={day => setDate(new Date(day.dateString))}
                         markedDates={marked}
@@ -291,71 +248,44 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
                         }}
                     />
 
-                    <Text style={styles.label}>Početak časa</Text>
-                    <View style={styles.timeRow}>
-                        <Picker
-                            selectedValue={startHour}
-                            style={styles.picker}
-                            onValueChange={setStartHour}
-                        >
-                            {hours.map(h => (
-                                <Picker.Item key={h} label={String(h).padStart(2, '0')} value={h} />
-                            ))}
-                        </Picker>
-                        <Picker
-                            selectedValue={startMinute}
-                            style={styles.picker}
-                            onValueChange={setStartMinute}
-                        >
-                            {minutes.map(m => (
-                                <Picker.Item key={m} label={String(m).padStart(2, '0')} value={m} />
-                            ))}
-                        </Picker>
-                    </View>
-
-                    <Text style={styles.label}>Kraj časa</Text>
-                    <View style={styles.timeRow}>
-                        <Picker
-                            selectedValue={endHour}
-                            style={styles.picker}
-                            onValueChange={setEndHour}
-                        >
-                            {hours.map(h => (
-                                <Picker.Item key={h} label={String(h).padStart(2, '0')} value={h} />
-                            ))}
-                        </Picker>
-                        <Picker
-                            selectedValue={endMinute}
-                            style={styles.picker}
-                            onValueChange={setEndMinute}
-                        >
-                            {minutes.map(m => (
-                                <Picker.Item key={m} label={String(m).padStart(2, '0')} value={m} />
-                            ))}
-                        </Picker>
-                    </View>
+                    <Text style={styles.label}>Vreme početka časa</Text>
+                    <Picker
+                        selectedValue={selectedTime}
+                        style={[styles.picker, errors.time && { borderColor: 'red', borderWidth: 1 }]}
+                        onValueChange={(value) => {
+                            setSelectedTime(value);
+                            setErrors(prev => ({ ...prev, time: false }));
+                        }}
+                    >
+                        <Picker.Item label="Izaberi vreme" value={null} />
+                        {availableTimes.map((time) => (
+                            <Picker.Item key={time} label={time} value={time} />
+                        ))}
+                    </Picker>
 
                     <Text style={styles.label}>Lokacija</Text>
-                    {errors.location && <Text style={{ color: 'red', marginTop: '-10' }}>Lokacija je obavezna</Text>}
-                    <TextInput
-                        style={[styles.input, errors.location && { borderColor: 'red', borderWidth: 1 }]}
-                        placeholder="Unesite mesto..."
-                        value={location}
-                        ref={locationRef}
-                        onChangeText={text => {
-                            setLocation(text);
-                            if (text.trim()) {
-                                setErrors(prev => ({ ...prev, location: false }));
-                            }
+                    <Picker
+                        selectedValue={location}
+                        style={[styles.picker, errors.location && { borderColor: 'red', borderWidth: 1 }]}
+                        onValueChange={(value) => {
+                            setLocation(value);
+                            setErrors(prev => ({ ...prev, location: false }));
                         }}
-                    />
+                    >
+                        <Picker.Item label="Izaberi lokaciju" value="" />
+                        {availableLocations.map((loc) => (
+                            <Picker.Item key={loc} label={loc} value={loc} />
+                        ))}
+                    </Picker>
 
                     <TouchableOpacity
                         style={styles.button}
                         onPress={handleSubmit}
                         disabled={submitting}
                     >
-                        <Text style={styles.buttonText}>{submitting ? 'Šaljem...' : 'Pošalji zahtev'}</Text>
+                        <Text style={styles.buttonText}>
+                            {submitting ? 'Šaljem...' : 'Pošalji zahtev'}
+                        </Text>
                     </TouchableOpacity>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -365,14 +295,13 @@ export default function ClassSessionRequestScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
     container: { padding: 16 },
-    label: { fontSize: 14, fontWeight: '600', marginTop: 12, marginBottom: 12 },
+    label: { fontSize: 14, fontWeight: '600', marginTop: 12, marginBottom: 8 },
     dropdown: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 0 },
     option: { padding: 8, backgroundColor: '#fff', margin: 4, borderRadius: 6, borderWidth: 1, borderColor: '#ddd' },
-    selected: { backgroundColor: '#4e54c8', borderColor: '#4e54c8', color: "#fff" },
+    selected: { backgroundColor: '#4e54c8', borderColor: '#4e54c8' },
     optionText: { fontSize: 14, color: '#333' },
-    timeRow: { flexDirection: 'row', marginTop: 8 },
-    picker: { flex: 1, backgroundColor: '#fff' },
-    input: { backgroundColor: '#fff', padding: 12, borderRadius: 6, marginTop: 8, borderWidth: 1, borderColor: '#ddd' },
+    optionSelectedText: { color: '#fff' },
+    picker: { backgroundColor: '#fff', marginTop: 8 },
     button: { backgroundColor: '#4e54c8', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 24 },
     buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

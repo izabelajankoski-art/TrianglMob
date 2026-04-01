@@ -1,6 +1,4 @@
-// front/screens/FirstLogin.js
-
-import React, { useState, useContext } from 'react';
+import React, {useContext, useState} from 'react';
 import {
     SafeAreaView,
     View,
@@ -14,11 +12,12 @@ import {
     Platform,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import api from '../api';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import DropDownPicker from 'react-native-dropdown-picker';
-import { AuthContext } from '../context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import api from '../api';
+import {AuthContext} from "../context/AuthContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const COLORS = {
     white: '#FFFFFF',
@@ -26,21 +25,31 @@ const COLORS = {
     navy: '#112E50',
     lightGray: '#F4F4F4',
     placeholder: '#B0B0B0',
-    accent: '#EDEDED',
 };
 
 export default function FirstLoginScreen() {
     const navigation = useNavigation();
-    const { user } = useRoute().params;
+    const { user, setUser } = useContext(AuthContext);
 
+    // zajedničko (šifra)
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+    // student polja
     const [parentName, setParentName] = useState('');
     const [parentPhone, setParentPhone] = useState('');
     const [phone, setPhone] = useState('');
     const [primarySchool, setPrimarySchool] = useState('');
     const [birthDate, setBirthDate] = useState(new Date());
     const [gradeValue, setGradeValue] = useState('');
-    const [loading, setLoading] = useState(false);
-    const gradeOptions = [
+
+    // teacher polja
+    const [yearExp, setYearExp] = useState('');
+
+    const [gradeOpen, setGradeOpen] = useState(false);
+    const [gradeItems, setGradeItems] = useState([
         { label: 'Prvi razred – osnovna škola', value: 'prvi_os' },
         { label: 'Drugi razred – osnovna škola', value: 'drugi_os' },
         { label: 'Treći razred – osnovna škola', value: 'treci_os' },
@@ -54,14 +63,12 @@ export default function FirstLoginScreen() {
         { label: 'Treći razred – srednja škola', value: 'treci_ss' },
         { label: 'Četvrti razred – srednja škola', value: 'cetvrti_ss' },
         { label: 'Fakultet', value: 'fax' },
+    ]);
 
-    ];
+    const [loading, setLoading] = useState(false);
 
-    const [gradeOpen, setGradeOpen] = useState(false);
-    const [gradeItems, setGradeItems] = useState(gradeOptions);
-
-
-    const { setUser, setProfile } = useContext(AuthContext);
+    // ✅ Android: picker se prikazuje samo kad korisnik klikne (da ne iskače na svaki rerender)
+    const [showDatePicker, setShowDatePicker] = useState(false);
 
     const formatDate = (date) => {
         const year = date.getFullYear();
@@ -70,53 +77,147 @@ export default function FirstLoginScreen() {
         return `${year}-${month}-${day}`;
     };
 
+    const handleBirthDateChange = (event, selectedDate) => {
+        // Android: zatvori dialog posle izbora / cancel
+        if (Platform.OS === 'android') setShowDatePicker(false);
 
-    const handleComplete = async () => {
-        if (!parentName || !parentPhone || !phone || !primarySchool || !birthDate) {
-            Alert.alert('Upozorenje', 'Sva polja su obavezna.');
+        // iOS: event može dolaziti više puta; čuvamo samo ako postoji datum
+        if (selectedDate) setBirthDate(selectedDate);
+    };
+
+    const handleSave = async () => {
+        if (!password || !confirmPassword) {
+            Alert.alert('Upozorenje', 'Unesite i šifru i potvrdu šifre.');
+            return;
+        }
+
+        if (password.length < 8) {
+            Alert.alert('Upozorenje', 'Šifra mora imati najmanje 8 karaktera.');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            Alert.alert('Greška', 'Šifre se ne poklapaju.');
             return;
         }
 
         setLoading(true);
         try {
-            // Kreiraj ili ažuriraj student profil
-            const postResp = await api.post('/student', {
-                user_id: user.id,
-                parent_name: parentName,
-                parent_phone: parentPhone,
-                phone,
-                grade: gradeValue,
-                primary_school: primarySchool,
-                birth_date: formatDate(birthDate),
-                device_name: user.current_device || 'default_device',
+            // 1️⃣ Promena šifre (zajednička ruta)
+            await api.put(`/user/${user.id}`, {
+                username: user.username,
+                role: user.role,
+                password: password,
+                new_user: false,
             });
 
-            // Izvuci ID novokreiranog studenta iz odgovora
-            const createdStudent = postResp.data;
-            const studentId = createdStudent.id;
-            if (!studentId) throw new Error('Student ID nije vraćen iz odgovora.');
+            // 2️⃣ Update dodatnih podataka zavisno od role
+            if (user.role === 'student') {
+                if (!parentName || !phone || !primarySchool) {
+                    Alert.alert('Upozorenje', 'Popunite sva obavezna polja.');
+                    setLoading(false);
+                    return;
+                }
 
-            // Dohvati profil studenta koristeći novi ID
-            const { data: profile } = await api.get(`/student/${studentId}`);
-            setUser(user);
-            setProfile(profile);
+                await api.put(`/student/${user.student.id}`, {
+                    user_id: user.id,
+                    parent_name: parentName,
+                    parent_phone: parentPhone,
+                    phone,
+                    primary_school: primarySchool,
+                    grade: gradeValue,
+                    birth_date: formatDate(birthDate),
+                });
+            } else if (user.role === 'teacher') {
+                if (!phone || !birthDate || !yearExp) {
+                    Alert.alert('Upozorenje', 'Popunite sva obavezna polja.');
+                    setLoading(false);
+                    return;
+                }
+
+                await api.put(`/teacher/${user.teacher.id}`, {
+                    phone,
+                    year_exp: parseInt(yearExp, 10),
+                    birth_date: formatDate(birthDate),
+                });
+            }
+
+            Alert.alert('Uspešno', 'Podaci su sačuvani.');
+
+            const updatedUser = {
+                ...user,
+                new_user: 0,
+            };
+
+            setUser(updatedUser);
+            await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
 
             navigation.reset({
                 index: 0,
                 routes: [{ name: 'Dashboard' }],
             });
-            // navigation.replace('StudentHome', { user, profile });
         } catch (err) {
             console.error(err);
-            Alert.alert('Greška', err.response?.data?.message || err.message || 'Došlo je do greške.');
+            Alert.alert(
+                'Greška',
+                err.response?.data?.message || err.message || 'Došlo je do greške.'
+            );
         } finally {
             setLoading(false);
         }
     };
 
+    // ✅ iOS: inline spinner (kao pre). Android: “polje” + picker samo kad treba.
+    const BirthDateField = () => (
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>Datum rođenja *</Text>
+
+            {Platform.OS === 'ios' ? (
+                <DateTimePicker
+                    display="spinner"
+                    value={birthDate}
+                    mode="date"
+                    onChange={handleBirthDateChange}
+                />
+            ) : (
+                <>
+                    <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => setShowDatePicker(true)}
+                    >
+                        {/* pointerEvents none da klik ide na TouchableOpacity, a izgleda kao input */}
+                        <View pointerEvents="none">
+                            <TextInput
+                                value={formatDate(birthDate)}
+                                placeholder="Izaberite datum"
+                                placeholderTextColor={COLORS.placeholder}
+                                editable={false}
+                                style={styles.input}
+                            />
+                        </View>
+                    </TouchableOpacity>
+
+                    {showDatePicker && (
+                        <DateTimePicker
+                            value={birthDate}
+                            mode="date"
+                            display="default"
+                            onChange={(event, selectedDate) => {
+                                // Android: razlikuj potvrdu i cancel (da ne menja datum na dismiss)
+                                setShowDatePicker(false);
+                                if (event?.type === 'set' && selectedDate) {
+                                    setBirthDate(selectedDate);
+                                }
+                            }}
+                        />
+                    )}
+                </>
+            )}
+        </View>
+    );
+
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header without background, clean design */}
             <View style={styles.headerContainer}>
                 <MaterialIcons name="emoji-people" size={48} color={COLORS.navy} />
                 <Text style={styles.headerTitle}>Dobrodošli</Text>
@@ -129,113 +230,153 @@ export default function FirstLoginScreen() {
                 style={styles.flex}
             >
                 <ScrollView contentContainerStyle={styles.form}>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Ime roditelja *</Text>
+                    {/* PROMENA ŠIFRE */}
+                    <Text style={styles.label}>Nova šifra *</Text>
+                    <View style={styles.passwordContainer}>
                         <TextInput
-                            value={parentName}
-                            onChangeText={setParentName}
-                            placeholder="Unesite ime roditelja"
+                            value={password}
+                            onChangeText={setPassword}
+                            placeholder="Unesite novu šifru"
                             placeholderTextColor={COLORS.placeholder}
+                            secureTextEntry={!showPassword}
                             style={styles.input}
                         />
+                        <TouchableOpacity
+                            style={styles.eyeIcon}
+                            onPress={() => setShowPassword(!showPassword)}
+                        >
+                            <Ionicons
+                                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                                size={22}
+                                color={COLORS.navy}
+                            />
+                        </TouchableOpacity>
                     </View>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Telefon roditelja</Text>
+                    <Text style={styles.label}>Potvrdi šifru *</Text>
+                    <View style={styles.passwordContainer}>
                         <TextInput
-                            value={parentPhone}
-                            onChangeText={setParentPhone}
-                            placeholder="Unesite broj telefona roditelja"
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
+                            placeholder="Potvrdite šifru"
                             placeholderTextColor={COLORS.placeholder}
-                            keyboardType="phone-pad"
+                            secureTextEntry={!showConfirmPassword}
                             style={styles.input}
                         />
+                        <TouchableOpacity
+                            style={styles.eyeIcon}
+                            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                        >
+                            <Ionicons
+                                name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                                size={22}
+                                color={COLORS.navy}
+                            />
+                        </TouchableOpacity>
                     </View>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Telefon *</Text>
-                        <TextInput
-                            value={phone}
-                            onChangeText={setPhone}
-                            placeholder="Unesite broj telefona"
-                            placeholderTextColor={COLORS.placeholder}
-                            keyboardType="phone-pad"
-                            style={styles.input}
-                        />
-                    </View>
+                    {/* STUDENT FORMA */}
+                    {user.role === 'student' && (
+                        <>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Ime roditelja *</Text>
+                                <TextInput
+                                    value={parentName}
+                                    onChangeText={setParentName}
+                                    placeholder="Unesite ime roditelja"
+                                    placeholderTextColor={COLORS.placeholder}
+                                    style={styles.input}
+                                />
+                            </View>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Škola *</Text>
-                        <TextInput
-                            value={primarySchool}
-                            onChangeText={setPrimarySchool}
-                            placeholder="Naziv škole"
-                            placeholderTextColor={COLORS.placeholder}
-                            style={styles.input}
-                        />
-                    </View>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Telefon roditelja</Text>
+                                <TextInput
+                                    value={parentPhone}
+                                    onChangeText={setParentPhone}
+                                    placeholder="Telefon roditelja"
+                                    placeholderTextColor={COLORS.placeholder}
+                                    keyboardType="phone-pad"
+                                    style={styles.input}
+                                />
+                            </View>
 
-                    {/* Grade Dropdown */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Razred</Text>
-                        <DropDownPicker
-                            listMode="MODAL"
-                            open={gradeOpen}
-                            value={gradeValue}
-                            items={gradeItems}
-                            setOpen={setGradeOpen}
-                            setValue={setGradeValue}
-                            setItems={setGradeItems}
-                            placeholder="Izaberite razred"
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Telefon *</Text>
+                                <TextInput
+                                    value={phone}
+                                    onChangeText={setPhone}
+                                    placeholder="Unesite broj telefona"
+                                    placeholderTextColor={COLORS.placeholder}
+                                    keyboardType="phone-pad"
+                                    style={styles.input}
+                                />
+                            </View>
 
-                            /* 1. Modal preko celog ekrana, ali podržava transparent pozadinu */
-                            modalProps={{
-                                animationType: 'fade',
-                                presentationStyle: 'overFullScreen'
-                            }}
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Škola *</Text>
+                                <TextInput
+                                    value={primarySchool}
+                                    onChangeText={setPrimarySchool}
+                                    placeholder="Naziv škole"
+                                    placeholderTextColor={COLORS.placeholder}
+                                    style={styles.input}
+                                />
+                            </View>
 
-                            /* 2. Stil za kontejner modala (pozadina + centriranje sadržaja) */
-                            modalContentContainerStyle={{
-                                flex: 1,
-                                justifyContent: 'center',
-                                alignItems: 'flex',
-                            }}
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Razred</Text>
+                                <DropDownPicker
+                                    listMode="MODAL"
+                                    open={gradeOpen}
+                                    value={gradeValue}
+                                    items={gradeItems}
+                                    setOpen={setGradeOpen}
+                                    setValue={setGradeValue}
+                                    setItems={setGradeItems}
+                                    placeholder="Izaberite razred"
+                                    style={{ borderRadius: 8 }}
+                                />
+                            </View>
 
-                            /* 3. Stil za samu listu stavki unutar modaļa */
-                            dropDownContainerStyle={{
-                                width: '80%',
-                                maxHeight: 250,
-                                borderRadius: 8,
-                                paddingVertical: 10,
-                            }}
+                            <BirthDateField />
+                        </>
+                    )}
 
-                            style={{
-                                borderRadius: 8,
-                            }}
-                        />
+                    {/* TEACHER FORMA */}
+                    {user.role === 'teacher' && (
+                        <>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Telefon *</Text>
+                                <TextInput
+                                    value={phone}
+                                    onChangeText={setPhone}
+                                    placeholder="Unesite broj telefona"
+                                    placeholderTextColor={COLORS.placeholder}
+                                    keyboardType="phone-pad"
+                                    style={styles.input}
+                                />
+                            </View>
 
-                    </View>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Godine iskustva *</Text>
+                                <TextInput
+                                    value={yearExp}
+                                    onChangeText={setYearExp}
+                                    placeholder="Unesite broj godina iskustva"
+                                    placeholderTextColor={COLORS.placeholder}
+                                    keyboardType="numeric"
+                                    style={styles.input}
+                                />
+                            </View>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Datum rođenja *</Text>
-                        {/* <TextInput
-                            value={birthDate}
-                            onChangeText={setBirthDate}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor={COLORS.placeholder}
-                            style={styles.input}
-                        /> */}
-                        <DateTimePicker display="spinner" value={birthDate} mode='date' onChange={(event, selectedDate) => {
-                                                                                            if (selectedDate) {
-                                                                                                setBirthDate(selectedDate);
-                                                                                            }
-                                                                                        }} 
-                        />
-                    </View>
+                            <BirthDateField />
+                        </>
+                    )}
 
                     <TouchableOpacity
                         style={styles.button}
-                        onPress={handleComplete}
+                        onPress={handleSave}
                         disabled={loading}
                     >
                         <Text style={styles.buttonText}>
@@ -289,6 +430,15 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         fontSize: 16,
         color: COLORS.navy,
+    },
+    passwordContainer: {
+        position: 'relative',
+        marginBottom: 18,
+    },
+    eyeIcon: {
+        position: 'absolute',
+        right: 16,
+        top: '30%',
     },
     button: {
         backgroundColor: COLORS.orange,

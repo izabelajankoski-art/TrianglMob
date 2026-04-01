@@ -113,7 +113,7 @@ export default function StudentDrawerNavigator({ route, navigation }) {
                     component={ClassSessionRequestScreen}
                     initialParams={{ user, profile }}
                     options={{
-                        title: 'Zahtevi',
+                        title: 'Zakaži cas',
                         drawerIcon: ({ size }) => <Ionicons name="send" size={size} color="#fff" />
                     }}
                 />
