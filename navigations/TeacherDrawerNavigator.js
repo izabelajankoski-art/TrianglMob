@@ -39,7 +39,7 @@ export default function TeacherDrawerNavigator({navigation}) {
                 name="TeacherInfo"
                 component={StudentHome}
                 options={{
-                    title: 'Information',
+                    title: 'Informacije',
                     drawerIcon: ({ size }) => <Ionicons name="home" size={size} color="#fff" />
                 }}
             />

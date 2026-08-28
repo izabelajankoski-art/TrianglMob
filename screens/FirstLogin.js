@@ -1,4 +1,5 @@
-import React, {useContext, useState} from 'react';
+
+import React, { useContext, useState } from 'react';
 import {
     SafeAreaView,
     View,
@@ -11,13 +12,13 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import DropDownPicker from 'react-native-dropdown-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import api from '../api';
-import {AuthContext} from "../context/AuthContext";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AuthContext } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const COLORS = {
     white: '#FFFFFF',
@@ -67,43 +68,56 @@ export default function FirstLoginScreen() {
 
     const [loading, setLoading] = useState(false);
 
-    // ✅ Android: picker se prikazuje samo kad korisnik klikne (da ne iskače na svaki rerender)
+    // Android: picker se prikazuje samo kada korisnik klikne
     const [showDatePicker, setShowDatePicker] = useState(false);
 
     const formatDate = (date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
+
         return `${year}-${month}-${day}`;
     };
 
     const handleBirthDateChange = (event, selectedDate) => {
-        // Android: zatvori dialog posle izbora / cancel
-        if (Platform.OS === 'android') setShowDatePicker(false);
+        if (Platform.OS === 'android') {
+            setShowDatePicker(false);
+        }
 
-        // iOS: event može dolaziti više puta; čuvamo samo ako postoji datum
-        if (selectedDate) setBirthDate(selectedDate);
+        if (selectedDate) {
+            setBirthDate(selectedDate);
+        }
     };
 
     const handleSave = async () => {
         if (!password || !confirmPassword) {
-            Alert.alert('Upozorenje', 'Unesite i šifru i potvrdu šifre.');
+            Alert.alert(
+                'Upozorenje',
+                'Unesite i šifru i potvrdu šifre.'
+            );
             return;
         }
 
         if (password.length < 8) {
-            Alert.alert('Upozorenje', 'Šifra mora imati najmanje 8 karaktera.');
+            Alert.alert(
+                'Upozorenje',
+                'Šifra mora imati najmanje 8 karaktera.'
+            );
             return;
         }
 
         if (password !== confirmPassword) {
-            Alert.alert('Greška', 'Šifre se ne poklapaju.');
+            Alert.alert(
+                'Greška',
+                'Šifre se ne poklapaju.'
+            );
             return;
         }
 
         setLoading(true);
+
         try {
-            // 1️⃣ Promena šifre (zajednička ruta)
+            // Promena šifre
             await api.put(`/user/${user.id}`, {
                 username: user.username,
                 role: user.role,
@@ -111,10 +125,14 @@ export default function FirstLoginScreen() {
                 new_user: false,
             });
 
-            // 2️⃣ Update dodatnih podataka zavisno od role
+            // Update dodatnih podataka zavisno od role
             if (user.role === 'student') {
                 if (!parentName || !phone || !primarySchool) {
-                    Alert.alert('Upozorenje', 'Popunite sva obavezna polja.');
+                    Alert.alert(
+                        'Upozorenje',
+                        'Popunite sva obavezna polja.'
+                    );
+
                     setLoading(false);
                     return;
                 }
@@ -130,7 +148,11 @@ export default function FirstLoginScreen() {
                 });
             } else if (user.role === 'teacher') {
                 if (!phone || !birthDate || !yearExp) {
-                    Alert.alert('Upozorenje', 'Popunite sva obavezna polja.');
+                    Alert.alert(
+                        'Upozorenje',
+                        'Popunite sva obavezna polja.'
+                    );
+
                     setLoading(false);
                     return;
                 }
@@ -142,7 +164,10 @@ export default function FirstLoginScreen() {
                 });
             }
 
-            Alert.alert('Uspešno', 'Podaci su sačuvani.');
+            Alert.alert(
+                'Uspešno',
+                'Podaci su sačuvani.'
+            );
 
             const updatedUser = {
                 ...user,
@@ -150,7 +175,11 @@ export default function FirstLoginScreen() {
             };
 
             setUser(updatedUser);
-            await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+
+            await AsyncStorage.setItem(
+                'user',
+                JSON.stringify(updatedUser)
+            );
 
             navigation.reset({
                 index: 0,
@@ -158,19 +187,23 @@ export default function FirstLoginScreen() {
             });
         } catch (err) {
             console.error(err);
+
             Alert.alert(
                 'Greška',
-                err.response?.data?.message || err.message || 'Došlo je do greške.'
+                err.response?.data?.message ||
+                    err.message ||
+                    'Došlo je do greške.'
             );
         } finally {
             setLoading(false);
         }
     };
 
-    // ✅ iOS: inline spinner (kao pre). Android: “polje” + picker samo kad treba.
     const BirthDateField = () => (
         <View style={styles.inputGroup}>
-            <Text style={styles.label}>Datum rođenja *</Text>
+            <Text style={styles.label}>
+                Datum rođenja *
+            </Text>
 
             {Platform.OS === 'ios' ? (
                 <DateTimePicker
@@ -185,7 +218,6 @@ export default function FirstLoginScreen() {
                         activeOpacity={0.85}
                         onPress={() => setShowDatePicker(true)}
                     >
-                        {/* pointerEvents none da klik ide na TouchableOpacity, a izgleda kao input */}
                         <View pointerEvents="none">
                             <TextInput
                                 value={formatDate(birthDate)}
@@ -203,9 +235,12 @@ export default function FirstLoginScreen() {
                             mode="date"
                             display="default"
                             onChange={(event, selectedDate) => {
-                                // Android: razlikuj potvrdu i cancel (da ne menja datum na dismiss)
                                 setShowDatePicker(false);
-                                if (event?.type === 'set' && selectedDate) {
+
+                                if (
+                                    event?.type === 'set' &&
+                                    selectedDate
+                                ) {
                                     setBirthDate(selectedDate);
                                 }
                             }}
@@ -218,20 +253,63 @@ export default function FirstLoginScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
+
+            {/* HEADER */}
             <View style={styles.headerContainer}>
-                <MaterialIcons name="emoji-people" size={48} color={COLORS.navy} />
-                <Text style={styles.headerTitle}>Dobrodošli</Text>
-                <Text style={styles.headerSubtitle}>{user.name}</Text>
+
+                {/* NAZAD NA LOGIN */}
+                <TouchableOpacity
+                    onPress={() => navigation.replace('Login')}
+                    style={styles.backButton}
+                    activeOpacity={0.7}
+                >
+                    <MaterialIcons
+                        name="arrow-back"
+                        size={24}
+                        color={COLORS.navy}
+                    />
+
+                    <Text style={styles.backText}>
+                        Nazad na prijavu
+                    </Text>
+                </TouchableOpacity>
+
+                <MaterialIcons
+                    name="emoji-people"
+                    size={48}
+                    color={COLORS.navy}
+                />
+
+                <Text style={styles.headerTitle}>
+                    Dobrodošli
+                </Text>
+
+                <Text style={styles.headerSubtitle}>
+                    {user.name}
+                </Text>
             </View>
+
             <View style={styles.accentLine} />
 
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={
+                    Platform.OS === 'ios'
+                        ? 'padding'
+                        : undefined
+                }
                 style={styles.flex}
             >
-                <ScrollView contentContainerStyle={styles.form}>
+                <ScrollView
+                    contentContainerStyle={styles.form}
+                    keyboardShouldPersistTaps="handled"
+                >
+
                     {/* PROMENA ŠIFRE */}
-                    <Text style={styles.label}>Nova šifra *</Text>
+
+                    <Text style={styles.label}>
+                        Nova šifra *
+                    </Text>
+
                     <View style={styles.passwordContainer}>
                         <TextInput
                             value={password}
@@ -241,19 +319,29 @@ export default function FirstLoginScreen() {
                             secureTextEntry={!showPassword}
                             style={styles.input}
                         />
+
                         <TouchableOpacity
                             style={styles.eyeIcon}
-                            onPress={() => setShowPassword(!showPassword)}
+                            onPress={() =>
+                                setShowPassword(!showPassword)
+                            }
                         >
                             <Ionicons
-                                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                                name={
+                                    showPassword
+                                        ? 'eye-off-outline'
+                                        : 'eye-outline'
+                                }
                                 size={22}
                                 color={COLORS.navy}
                             />
                         </TouchableOpacity>
                     </View>
 
-                    <Text style={styles.label}>Potvrdi šifru *</Text>
+                    <Text style={styles.label}>
+                        Potvrdi šifru *
+                    </Text>
+
                     <View style={styles.passwordContainer}>
                         <TextInput
                             value={confirmPassword}
@@ -263,12 +351,21 @@ export default function FirstLoginScreen() {
                             secureTextEntry={!showConfirmPassword}
                             style={styles.input}
                         />
+
                         <TouchableOpacity
                             style={styles.eyeIcon}
-                            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                            onPress={() =>
+                                setShowConfirmPassword(
+                                    !showConfirmPassword
+                                )
+                            }
                         >
                             <Ionicons
-                                name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                                name={
+                                    showConfirmPassword
+                                        ? 'eye-off-outline'
+                                        : 'eye-outline'
+                                }
                                 size={22}
                                 color={COLORS.navy}
                             />
@@ -276,10 +373,14 @@ export default function FirstLoginScreen() {
                     </View>
 
                     {/* STUDENT FORMA */}
+
                     {user.role === 'student' && (
                         <>
                             <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Ime roditelja *</Text>
+                                <Text style={styles.label}>
+                                    Ime roditelja *
+                                </Text>
+
                                 <TextInput
                                     value={parentName}
                                     onChangeText={setParentName}
@@ -290,7 +391,10 @@ export default function FirstLoginScreen() {
                             </View>
 
                             <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Telefon roditelja</Text>
+                                <Text style={styles.label}>
+                                    Telefon roditelja
+                                </Text>
+
                                 <TextInput
                                     value={parentPhone}
                                     onChangeText={setParentPhone}
@@ -302,7 +406,10 @@ export default function FirstLoginScreen() {
                             </View>
 
                             <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Telefon *</Text>
+                                <Text style={styles.label}>
+                                    Telefon *
+                                </Text>
+
                                 <TextInput
                                     value={phone}
                                     onChangeText={setPhone}
@@ -314,7 +421,10 @@ export default function FirstLoginScreen() {
                             </View>
 
                             <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Škola *</Text>
+                                <Text style={styles.label}>
+                                    Škola *
+                                </Text>
+
                                 <TextInput
                                     value={primarySchool}
                                     onChangeText={setPrimarySchool}
@@ -325,7 +435,10 @@ export default function FirstLoginScreen() {
                             </View>
 
                             <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Razred</Text>
+                                <Text style={styles.label}>
+                                    Razred
+                                </Text>
+
                                 <DropDownPicker
                                     listMode="MODAL"
                                     open={gradeOpen}
@@ -335,7 +448,9 @@ export default function FirstLoginScreen() {
                                     setValue={setGradeValue}
                                     setItems={setGradeItems}
                                     placeholder="Izaberite razred"
-                                    style={{ borderRadius: 8 }}
+                                    style={{
+                                        borderRadius: 8,
+                                    }}
                                 />
                             </View>
 
@@ -344,10 +459,14 @@ export default function FirstLoginScreen() {
                     )}
 
                     {/* TEACHER FORMA */}
+
                     {user.role === 'teacher' && (
                         <>
                             <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Telefon *</Text>
+                                <Text style={styles.label}>
+                                    Telefon *
+                                </Text>
+
                                 <TextInput
                                     value={phone}
                                     onChangeText={setPhone}
@@ -359,7 +478,10 @@ export default function FirstLoginScreen() {
                             </View>
 
                             <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Godine iskustva *</Text>
+                                <Text style={styles.label}>
+                                    Godine iskustva *
+                                </Text>
+
                                 <TextInput
                                     value={yearExp}
                                     onChangeText={setYearExp}
@@ -374,15 +496,20 @@ export default function FirstLoginScreen() {
                         </>
                     )}
 
+                    {/* SAVE */}
+
                     <TouchableOpacity
                         style={styles.button}
                         onPress={handleSave}
                         disabled={loading}
                     >
                         <Text style={styles.buttonText}>
-                            {loading ? 'Sačekajte...' : 'Sačuvaj'}
+                            {loading
+                                ? 'Sačekajte...'
+                                : 'Sačuvaj'}
                         </Text>
                     </TouchableOpacity>
+
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
@@ -390,39 +517,72 @@ export default function FirstLoginScreen() {
 }
 
 const styles = StyleSheet.create({
-    flex: { flex: 1 },
-    container: { flex: 1, backgroundColor: COLORS.white },
+    flex: {
+        flex: 1,
+    },
+
+    container: {
+        flex: 1,
+        backgroundColor: COLORS.white,
+    },
+
     headerContainer: {
         padding: 20,
         alignItems: 'center',
         backgroundColor: COLORS.white,
     },
+
+    // Nazad na login
+    backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        marginBottom: 15,
+    },
+
+    backText: {
+        marginLeft: 6,
+        color: COLORS.navy,
+        fontSize: 15,
+        fontWeight: '500',
+    },
+
     headerTitle: {
         color: COLORS.navy,
         fontSize: 22,
         fontWeight: '700',
         marginTop: 8,
     },
+
     headerSubtitle: {
         color: COLORS.navy,
         fontSize: 16,
         marginTop: 4,
         opacity: 0.7,
     },
+
     accentLine: {
         height: 4,
         backgroundColor: COLORS.orange,
         marginHorizontal: 40,
         borderRadius: 2,
     },
-    form: { padding: 24 },
-    inputGroup: { marginBottom: 18 },
+
+    form: {
+        padding: 24,
+    },
+
+    inputGroup: {
+        marginBottom: 18,
+    },
+
     label: {
         color: COLORS.navy,
         marginBottom: 6,
         fontSize: 14,
         fontWeight: '500',
     },
+
     input: {
         backgroundColor: COLORS.lightGray,
         borderRadius: 10,
@@ -431,15 +591,18 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: COLORS.navy,
     },
+
     passwordContainer: {
         position: 'relative',
         marginBottom: 18,
     },
+
     eyeIcon: {
         position: 'absolute',
         right: 16,
         top: '30%',
     },
+
     button: {
         backgroundColor: COLORS.orange,
         paddingVertical: 16,
@@ -447,9 +610,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginTop: 12,
     },
+
     buttonText: {
         color: COLORS.white,
         fontSize: 18,
         fontWeight: '600',
     },
 });
+

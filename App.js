@@ -188,12 +188,12 @@ function AppNavigator() {
 
 export default function App() {
     return (
-        <AuthProvider>
-            <NavigationContainer ref={navigationRef}>
-                <SafeAreaProvider>
+        <SafeAreaProvider>
+            <AuthProvider>
+                <NavigationContainer>
                     <AppNavigator />
-                </SafeAreaProvider>
-            </NavigationContainer>
-        </AuthProvider>
+                </NavigationContainer>
+            </AuthProvider>
+        </SafeAreaProvider>
     );
 }
