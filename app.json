@@ -2,7 +2,7 @@
   "expo": {
     "name": "Triangl",
     "slug": "Triangl",
-    "version": "1.0.11",
+    "version": "1.0.12",
     "orientation": "portrait",
     "icon": "./assets/ic_launcher.png",
     "userInterfaceStyle": "light",
@@ -22,7 +22,7 @@
       "supportsTablet": true,
       "bundler": "metro",
       "bundleIdentifier": "com.triangl.app",
-      "buildNumber": "24",
+      "buildNumber": "25",
       "infoPlist": {
         "NSCameraUsageDescription": "Aplikacija treba pristup kameri za skeniranje QR kodova",
         "ITSAppUsesNonExemptEncryption": false
@@ -35,7 +35,7 @@
         "bundler": "metro"
       },
       "icon": "./assets/ic_launcher.png",
-      "versionCode": 24,
+      "versionCode": 25,
       "package": "com.crni89.myapp",
       "permissions": [
         "CAMERA",
